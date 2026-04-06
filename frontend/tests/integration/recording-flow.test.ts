@@ -98,6 +98,24 @@ describe('Recording Flow Integration', () => {
     );
   });
 
+  it('enqueues a transcribe operation after recording completes', async () => {
+    const ts = Date.now();
+    const audio = makeFakeAudioBuffer(512);
+    const executor = vi.fn().mockResolvedValue(undefined);
+    const queue = new MutationQueue(db, executor);
+    const enqueueSpy = vi.spyOn(queue, 'enqueue');
+
+    await onRecordingComplete(
+      { clientTimestamp: ts, audioData: audio, mimeType: 'audio/mp4', duration: 10, location: null },
+      { recordingsCache, audioCache, queue },
+    );
+
+    const enqueuedTypes = enqueueSpy.mock.calls.map(([op]) => op.type);
+    expect(enqueuedTypes).toContain('transcribe');
+    const transcribeCall = enqueueSpy.mock.calls.find(([op]) => op.type === 'transcribe');
+    expect(transcribeCall?.[0]).toMatchObject({ type: 'transcribe', recordingId: `rec_${ts}`, mode: 'local' });
+  });
+
   it('optimistic entry shows location from recording', async () => {
     const ts = Date.now();
     const executor = vi.fn().mockResolvedValue(undefined);

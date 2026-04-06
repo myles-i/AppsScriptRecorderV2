@@ -18,6 +18,8 @@ import type { Recording, TextIndex } from './api/types';
 import type { IDBPDatabase } from 'idb';
 import type { VoiceRecorderDB } from './cache/db';
 import { arrayBufferToBase64 } from './utils/audio-utils';
+import { WhisperClient } from './transcription/whisper-client';
+import { getSettings } from './cache/settings-cache';
 
 export function App() {
   const [screen, setScreen] = useState<AppScreen>({ name: 'browse' });
@@ -64,14 +66,33 @@ export function App() {
             break;
           }
           case 'transcribe': {
-            const result = await api.transcribe(op.recordingId);
-            await tc.set(op.recordingId, result.transcript);
-            await rc.patch(op.recordingId, {
-              hasTranscript: true,
-              preview: result.transcript.text.substring(0, 200),
-              transcriptionSource: result.transcript.source,
-              transcriptionModel: result.transcript.model,
-            });
+            if (op.mode === 'local') {
+              const audio = await ac.get(op.recordingId);
+              if (!audio) throw new Error('Audio not in cache for local transcription');
+              const settings = await getSettings();
+              const whisper = new WhisperClient();
+              try {
+                const transcript = await whisper.transcribe(audio.data, settings.onDeviceModel);
+                await tc.set(op.recordingId, transcript);
+                await rc.patch(op.recordingId, {
+                  hasTranscript: true,
+                  preview: transcript.text.substring(0, 200),
+                  transcriptionSource: 'local',
+                  transcriptionModel: transcript.model,
+                });
+              } finally {
+                whisper.terminate();
+              }
+            } else {
+              const result = await api.transcribe(op.recordingId);
+              await tc.set(op.recordingId, result.transcript);
+              await rc.patch(op.recordingId, {
+                hasTranscript: true,
+                preview: result.transcript.text.substring(0, 200),
+                transcriptionSource: result.transcript.source,
+                transcriptionModel: result.transcript.model,
+              });
+            }
             break;
           }
           case 'save-transcript': {
@@ -261,6 +282,7 @@ function AppScreens({
         audioCache={audioCache}
         queue={queue}
         onNavigate={onNavigate}
+        onRecordingAdded={upsertRecording}
       />
     );
   }
