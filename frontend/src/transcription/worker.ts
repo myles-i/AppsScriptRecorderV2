@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { pipeline, env } from '@huggingface/transformers';
-import { resampleTo16kMono } from './resample';
 
 // Configure ONNX to use WASM backend, single thread for iOS compatibility
 (env as any).backends.onnx.wasm.numThreads = 1;
@@ -12,7 +11,7 @@ let currentModel: string | null = null;
 self.onmessage = async (e: MessageEvent) => {
   const { type, audioData, model } = e.data as {
     type: string;
-    audioData?: ArrayBuffer;
+    audioData?: Float32Array;
     model?: string;
   };
 
@@ -46,9 +45,10 @@ self.onmessage = async (e: MessageEvent) => {
 
       self.postMessage({ type: 'progress', stage: 'transcribing' });
 
-      const audio16k = await resampleTo16kMono(audioData);
-
-      const result: any = await transcriber(audio16k, {
+      // audioData arrives as a Float32Array already resampled to 16 kHz mono
+      // by the main thread (WhisperClient.transcribe) — OfflineAudioContext is
+      // not available in Web Workers on iOS Safari so resampling cannot happen here.
+      const result: any = await transcriber(audioData, {
         return_timestamps: true,
         chunk_length_s: 30,
         stride_length_s: 5,

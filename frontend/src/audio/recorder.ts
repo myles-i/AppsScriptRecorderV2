@@ -1,5 +1,27 @@
 import { blobsToArrayBuffer } from '../utils/audio-utils';
 
+// Holds an AudioContext created inside a user gesture so it can be reused by
+// AudioRecorder.start(), which runs outside the gesture (inside useEffect).
+// iOS Safari requires AudioContext.resume() to be called within a user gesture;
+// creating it here and resuming it in the gesture satisfies that requirement.
+let _pendingAudioCtx: AudioContext | null = null;
+
+/**
+ * Create and immediately resume an AudioContext within a user gesture.
+ * Call this synchronously in the click/tap handler that navigates to the
+ * record screen so that the AudioContext is already running by the time
+ * AudioRecorder.start() is called from useEffect.
+ */
+export function primeAudioContext(): void {
+  try {
+    const ctx = new AudioContext();
+    ctx.resume().catch(() => undefined);
+    _pendingAudioCtx = ctx;
+  } catch {
+    // Not fatal — waveform will simply not work if AudioContext cannot be created.
+  }
+}
+
 export interface RecorderState {
   status: 'idle' | 'recording' | 'paused' | 'stopping';
   elapsed: number;
@@ -52,9 +74,12 @@ export class AudioRecorder {
 
     const mimeType = getPreferredMimeType();
 
-    // Set up AudioContext for waveform amplitude
+    // Set up AudioContext for waveform amplitude.
+    // Use the pre-created context from primeAudioContext() when available so
+    // that resume() was already called inside the user gesture on iOS.
     try {
-      this.audioCtx = new AudioContext();
+      this.audioCtx = _pendingAudioCtx ?? new AudioContext();
+      _pendingAudioCtx = null;
       await this.audioCtx.resume();
       this.analyser = this.audioCtx.createAnalyser();
       const source = this.audioCtx.createMediaStreamSource(this.stream);

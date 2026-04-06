@@ -12,6 +12,7 @@ import { useSearch, findMatchingSegmentTime } from '../hooks/use-search';
 import { useOnline } from '../hooks/use-online';
 import type { AppScreen } from '../state/app-state';
 import { hasBackend } from '../cache/settings-cache';
+import { primeAudioContext } from '../audio/recorder';
 
 interface BrowseScreenProps {
   recordings: Recording[];
@@ -192,7 +193,7 @@ export function BrowseScreen({
 
       {/* Floating Action Button */}
       <button
-        onClick={() => onNavigate({ name: 'record' })}
+        onClick={() => { primeAudioContext(); onNavigate({ name: 'record' }); }}
         aria-label="Start recording"
         style={{
           position: 'fixed',

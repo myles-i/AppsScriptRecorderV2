@@ -1,4 +1,5 @@
 import type { Transcript } from '../api/types';
+import { resampleTo16kMono } from './resample';
 
 export class WhisperClient {
   private worker: Worker;
@@ -7,11 +8,16 @@ export class WhisperClient {
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   }
 
-  transcribe(
+  // Resampling is done here in the main thread rather than inside the worker
+  // because iOS Safari does not support OfflineAudioContext in Web Workers.
+  async transcribe(
     audioData: ArrayBuffer,
     model: 'tiny' | 'base' | 'small',
     onProgress?: (stage: string) => void,
   ): Promise<Transcript> {
+    onProgress?.('resampling');
+    const audio16k = await resampleTo16kMono(audioData);
+
     return new Promise((resolve, reject) => {
       this.worker.onmessage = (e: MessageEvent) => {
         switch (e.data.type) {
@@ -27,8 +33,8 @@ export class WhisperClient {
         }
       };
       this.worker.onerror = (err) => reject(err);
-      // Transfer ownership of the buffer for performance
-      this.worker.postMessage({ type: 'transcribe', audioData, model }, [audioData]);
+      // Transfer ownership of the Float32Array buffer for performance
+      this.worker.postMessage({ type: 'transcribe', audioData: audio16k, model }, [audio16k.buffer]);
     });
   }
 
