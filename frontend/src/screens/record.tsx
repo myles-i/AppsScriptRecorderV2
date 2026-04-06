@@ -5,7 +5,7 @@ import { WaveformVisualizer } from '../audio/waveform';
 import { useWakeLock } from '../hooks/use-wake-lock';
 import { getCurrentLocation, reverseGeocode } from '../utils/geo';
 import { formatElapsedTime } from '../utils/format';
-import type { GeoLocation } from '../api/types';
+import type { GeoLocation, Recording } from '../api/types';
 import type { AppScreen } from '../state/app-state';
 import type { RecordingsCacheImpl } from '../cache/recordings-cache';
 import type { AudioCacheImpl } from '../cache/audio-cache';
@@ -17,9 +17,10 @@ interface RecordScreenProps {
   audioCache: AudioCacheImpl;
   queue: MutationQueue;
   onNavigate: (screen: AppScreen) => void;
+  onRecordingAdded: (recording: Recording) => void;
 }
 
-export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate }: RecordScreenProps) {
+export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate, onRecordingAdded }: RecordScreenProps) {
   const [recState, setRecState] = useState<RecorderState>({
     status: 'idle',
     elapsed: 0,
@@ -89,7 +90,7 @@ export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate }:
           const result = await recorder.emergencySave();
           if (result) {
             const ts = Date.now();
-            await onRecordingComplete(
+            const recording = await onRecordingComplete(
               {
                 clientTimestamp: ts,
                 audioData: result.audio,
@@ -99,6 +100,7 @@ export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate }:
               },
               { recordingsCache, audioCache, queue },
             );
+            onRecordingAdded(recording);
           }
         }
       }
@@ -115,7 +117,7 @@ export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate }:
     const result = await recorder.stop();
     if (result) {
       const ts = Date.now();
-      await onRecordingComplete(
+      const recording = await onRecordingComplete(
         {
           clientTimestamp: ts,
           audioData: result.audio,
@@ -125,9 +127,10 @@ export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate }:
         },
         { recordingsCache, audioCache, queue },
       );
+      onRecordingAdded(recording);
     }
     onNavigate({ name: 'browse' });
-  }, [location, recordingsCache, audioCache, queue, onNavigate]);
+  }, [location, recordingsCache, audioCache, queue, onNavigate, onRecordingAdded]);
 
   const handlePause = () => recorderRef.current?.pause();
   const handleResume = () => recorderRef.current?.resume();

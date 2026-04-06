@@ -1,4 +1,4 @@
-import type { GeoLocation, Settings, Transcript } from '../api/types';
+import type { GeoLocation, Recording, Settings, Transcript } from '../api/types';
 
 export type QueueOperation =
   | { type: 'upload'; clientTimestamp: number; mimeType: string; duration: number; location: GeoLocation | null }
@@ -40,7 +40,7 @@ export interface RecordingServices {
 export async function onRecordingComplete(
   params: RecordingCompleteParams,
   services: RecordingServices,
-): Promise<void> {
+): Promise<Recording> {
   const { clientTimestamp, audioData, mimeType, duration, location } = params;
   const { recordingsCache, audioCache, queue } = services;
 
@@ -50,7 +50,7 @@ export async function onRecordingComplete(
   await audioCache.set(id, audioData, mimeType);
 
   // 2. Create optimistic recording entry
-  await recordingsCache.upsert({
+  const recording: Recording = {
     id,
     date: new Date(clientTimestamp).toISOString(),
     duration,
@@ -62,8 +62,14 @@ export async function onRecordingComplete(
     transcriptionSource: null,
     transcriptionModel: null,
     hasTranscript: false,
-  });
+  };
+  await recordingsCache.upsert(recording);
 
   // 3. Enqueue upload
   await queue.enqueue({ type: 'upload', clientTimestamp, mimeType, duration, location });
+
+  // 4. Enqueue local transcription (runs immediately; works offline and in demo mode)
+  await queue.enqueue({ type: 'transcribe', recordingId: id, mode: 'local' });
+
+  return recording;
 }
