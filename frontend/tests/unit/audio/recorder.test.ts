@@ -135,4 +135,13 @@ describe('AudioRecorder', () => {
     recorder.destroy();
     expect(recorder.getState().status).toBe('idle');
   });
+
+  it('getAnalyser() returns null before recording starts', () => {
+    expect(recorder.getAnalyser()).toBeNull();
+  });
+
+  it('getAnalyser() returns an AnalyserNode after recording starts', async () => {
+    await recorder.start();
+    expect(recorder.getAnalyser()).not.toBeNull();
+  });
 });

@@ -42,6 +42,10 @@ export class AudioRecorder {
     return { ...this.state };
   }
 
+  getAnalyser(): AnalyserNode | null {
+    return this.analyser;
+  }
+
   /** Must be called inside a user gesture handler (required for iOS). */
   async start(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
