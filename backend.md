@@ -55,11 +55,11 @@ AppsScriptRecorder/
     2026/
       04/
         05/
-          rec_1712345678901.mp4          # Audio file
-          rec_1712345678901.json         # Transcript
+          rec_2026-04-05_10-30-00.mp4    # Audio file
+          rec_2026-04-05_10-30-00.json   # Transcript
         06/
-          rec_1712345768901.webm
-          rec_1712345768901.json
+          rec_2026-04-06_08-15-30.webm
+          rec_2026-04-06_08-15-30.json
   auth/
     auth_<token>.json                    # Authorization request files
   index.json                             # Recordings index
@@ -70,8 +70,8 @@ AppsScriptRecorder/
 
 ### 3.1 Naming Conventions
 - **Root folder:** `AppsScriptRecorder` (created on first request if missing)
-- **Audio files:** `rec_<clientTimestamp>.<ext>` where `clientTimestamp` is ms since epoch at recording start; `ext` is `mp4` or `webm`.
-- **Transcript files:** `rec_<clientTimestamp>.json` (same name as audio, different extension).
+- **Audio files:** `rec_<YYYY-MM-DD_HH-MM-SS>.<ext>` where the timestamp is derived from `clientTimestamp` (ms since epoch) formatted in local time; `ext` is `mp4` or `webm`. Example: `rec_2026-04-05_10-30-00.mp4`.
+- **Transcript files:** `rec_<YYYY-MM-DD_HH-MM-SS>.json` (same name as audio, different extension).
 - **Date folders:** `recordings/YYYY/MM/DD/` (zero-padded).
 - **Auth files:** `auth_<token>.json` where token is a 32-char hex string.
 
@@ -595,7 +595,7 @@ Trigger cloud transcription via OpenAI Whisper API. Reads audio directly from Dr
 2. Read audio blob from Drive.
 3. Call OpenAI Whisper API (`POST https://api.openai.com/v1/audio/transcriptions`) with the audio blob.
 4. Parse response into segments format.
-5. Save transcript JSON file to Drive (alongside audio).
+5. Save transcript JSON file to Drive alongside the audio file, using the same human-readable timestamp: `rec_YYYY-MM-DD_HH-MM-SS.json`.
 6. Update index.json with `hasTranscript: true`, `preview`, `transcriptionSource`, `transcriptionModel`.
 7. Update text_index.json with full text and segments.
 
@@ -662,9 +662,10 @@ Save a locally-produced transcript to Drive (from on-device Whisper).
 ```
 
 **Processing:**
-1. Save transcript JSON file to Drive.
-2. Update index.json with transcript metadata and preview.
-3. Update text_index.json.
+1. Look up recording in index.json to find the date folder and derive the human-readable filename from the recording's `date` field (format: `rec_YYYY-MM-DD_HH-MM-SS.json`).
+2. Save transcript JSON file to Drive alongside the audio file.
+3. Update index.json with transcript metadata and preview.
+4. Update text_index.json.
 
 **Response:**
 ```json
@@ -969,7 +970,7 @@ interface Recording {
 
 Recordings are sorted by `date` descending (newest first).
 
-### 7.3 Transcript File (rec_<id>.json)
+### 7.3 Transcript File (rec_<YYYY-MM-DD_HH-MM-SS>.json)
 ```json
 {
   "text": "Good morning everyone, let's start with the updates...",
@@ -1260,10 +1261,18 @@ function uploadRecording(recording) {
   
   // Decode audio
   var audioBytes = Utilities.base64Decode(recording.audioBase64);
-  var blob = Utilities.newBlob(audioBytes, recording.mimeType, existingId + getExtension(recording.mimeType));
+  var date = new Date(recording.clientTimestamp);
+  var pad = function(n) { return ('0' + n).slice(-2); };
+  var humanTimestamp = date.getFullYear() + '-' +
+    pad(date.getMonth() + 1) + '-' +
+    pad(date.getDate()) + '_' +
+    pad(date.getHours()) + '-' +
+    pad(date.getMinutes()) + '-' +
+    pad(date.getSeconds());
+  var fileName = 'rec_' + humanTimestamp + getExtension(recording.mimeType);
+  var blob = Utilities.newBlob(audioBytes, recording.mimeType, fileName);
   
   // Create folder structure and save
-  var date = new Date(recording.clientTimestamp);
   var dateFolder = getDateFolder(date);
   var audioFile = dateFolder.createFile(blob);
   
