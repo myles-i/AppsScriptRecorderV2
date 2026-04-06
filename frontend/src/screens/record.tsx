@@ -47,15 +47,24 @@ export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate, o
     const recorder = new AudioRecorder(setRecState);
     recorderRef.current = recorder;
 
-    recorder.start().catch((err: Error) => {
-      if (err.name === 'NotAllowedError') {
-        setPermissionError('Microphone access denied. Please enable it in your browser settings.');
-      } else {
-        setPermissionError('Could not start recording: ' + err.message);
-      }
-    });
+    recorder.start()
+      .then(() => {
+        const analyser = recorder.getAnalyser();
+        if (canvasRef.current && analyser) {
+          vizRef.current = new WaveformVisualizer(canvasRef.current, analyser);
+          vizRef.current.start();
+        }
+      })
+      .catch((err: Error) => {
+        if (err.name === 'NotAllowedError') {
+          setPermissionError('Microphone access denied. Please enable it in your browser settings.');
+        } else {
+          setPermissionError('Could not start recording: ' + err.message);
+        }
+      });
 
     return () => {
+      vizRef.current?.stop();
       recorder.destroy();
     };
   }, []);
@@ -132,8 +141,14 @@ export function RecordScreen({ recordingsCache, audioCache, queue, onNavigate, o
     onNavigate({ name: 'browse' });
   }, [location, recordingsCache, audioCache, queue, onNavigate, onRecordingAdded]);
 
-  const handlePause = () => recorderRef.current?.pause();
-  const handleResume = () => recorderRef.current?.resume();
+  const handlePause = () => {
+    recorderRef.current?.pause();
+    vizRef.current?.stop();
+  };
+  const handleResume = () => {
+    recorderRef.current?.resume();
+    vizRef.current?.start();
+  };
 
   const handleBack = () => {
     if (recState.status === 'recording' || recState.status === 'paused') {
